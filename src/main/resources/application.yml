@@ -5,10 +5,10 @@ spring:
     oauth2:
       client:
         provider:
-          my-client:
+          client-example:
             token-uri: "https://dev-f4xax50bmjqj2knx.us.auth0.com/oauth/token"
         registration:
-          my-client:
+          client-example:
             client-id: "Cao5x6x1XttRii2HwGqAye3eb0UdsUdr"
             client-secret: "b71QJKijBQwju1Bc6OSKh7DIFfx-7HOnPKgtqL4vLtA6P33GP8wlGyHECcc21v4U"
             authorization-grant-type: "client_credentials"
@@ -16,3 +16,10 @@ spring:
 app:
   oauth2:
     audience: "http://games-api"
+  game-server:
+    url: "http://localhost:8080"
+
+logging:
+  level:
+    org.springframework.security.oauth2.client: debug
+    zaf.oauth2.client: debug

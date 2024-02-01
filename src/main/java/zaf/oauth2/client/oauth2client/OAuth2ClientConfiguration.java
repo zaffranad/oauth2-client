@@ -3,10 +3,11 @@ package zaf.oauth2.client.oauth2client;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.convert.converter.Converter;
-import org.springframework.security.oauth2.client.*;
+import org.springframework.security.oauth2.client.InMemoryOAuth2AuthorizedClientService;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClientManager;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClientProviderBuilder;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
 import org.springframework.security.oauth2.client.endpoint.DefaultClientCredentialsTokenResponseClient;
-import org.springframework.security.oauth2.client.endpoint.OAuth2ClientCredentialsGrantRequest;
 import org.springframework.security.oauth2.client.endpoint.OAuth2ClientCredentialsGrantRequestEntityConverter;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
@@ -22,13 +23,13 @@ public class OAuth2ClientConfiguration {
 
     @Bean
     ClientRegistration myClientRegistration(
-            @Value("${spring.security.oauth2.client.provider.my-client.token-uri}") String token_uri,
-            @Value("${spring.security.oauth2.client.registration.my-client.client-id}") String client_id,
-            @Value("${spring.security.oauth2.client.registration.my-client.client-secret}") String client_secret,
-            @Value("${spring.security.oauth2.client.registration.my-client.authorization-grant-type}") String authorizationGrantType
+            @Value("${spring.security.oauth2.client.provider.client-example.token-uri}") String token_uri,
+            @Value("${spring.security.oauth2.client.registration.client-example.client-id}") String client_id,
+            @Value("${spring.security.oauth2.client.registration.client-example.client-secret}") String client_secret,
+            @Value("${spring.security.oauth2.client.registration.client-example.authorization-grant-type}") String authorizationGrantType
     ) {
         return ClientRegistration
-                .withRegistrationId("my-client")
+                .withRegistrationId("client-example")
                 .tokenUri(token_uri)
                 .clientId(client_id)
                 .clientSecret(client_secret)
@@ -37,22 +38,13 @@ public class OAuth2ClientConfiguration {
     }
 
     @Bean
-    public ClientRegistrationRepository clientRegistrationRepository(ClientRegistration oktaClientRegistration) {
-        return new InMemoryClientRegistrationRepository(oktaClientRegistration);
+    public ClientRegistrationRepository clientRegistrationRepository(ClientRegistration clientRegistration) {
+        return new InMemoryClientRegistrationRepository(clientRegistration);
     }
 
     @Bean
     public OAuth2AuthorizedClientService auth2AuthorizedClientService(ClientRegistrationRepository clientRegistrationRepository) {
         return new InMemoryOAuth2AuthorizedClientService(clientRegistrationRepository);
-    }
-
-
-    private static Converter<OAuth2ClientCredentialsGrantRequest, MultiValueMap<String, String>> parametersConverter(String audience) {
-        return (grantRequest) -> {
-            MultiValueMap<String, String> parameters = new LinkedMultiValueMap<>();
-            parameters.set("audience", audience);
-            return parameters;
-        };
     }
 
     @Bean
@@ -61,25 +53,30 @@ public class OAuth2ClientConfiguration {
             OAuth2AuthorizedClientRepository authorizedClientRepository,
             @Value("${app.oauth2.audience}") String audience
     ) {
-        DefaultClientCredentialsTokenResponseClient responseClient = new DefaultClientCredentialsTokenResponseClient();
-        OAuth2ClientCredentialsGrantRequestEntityConverter converter = new OAuth2ClientCredentialsGrantRequestEntityConverter();
-        converter.addParametersConverter(parametersConverter(audience));
-        responseClient.setRequestEntityConverter(converter);
+        var responseClient = getDefaultClientCredentialsTokenResponseClient(audience);
 
+        var authorizedClientProvider = OAuth2AuthorizedClientProviderBuilder.builder()
+                .refreshToken()
+                .clientCredentials(builder -> builder.accessTokenResponseClient(responseClient).build())
+                .build();
 
-        OAuth2AuthorizedClientProvider authorizedClientProvider =
-                OAuth2AuthorizedClientProviderBuilder.builder()
-                        .refreshToken()
-                        .clientCredentials(clientCredentialsGrantBuilder ->
-                                clientCredentialsGrantBuilder.accessTokenResponseClient(responseClient)
-                                        .build())
-                        .build();
-
-        DefaultOAuth2AuthorizedClientManager authorizedClientManager =
-                new DefaultOAuth2AuthorizedClientManager(
-                        clientRegistrationRepository, authorizedClientRepository);
+        var authorizedClientManager = new DefaultOAuth2AuthorizedClientManager(clientRegistrationRepository, authorizedClientRepository);
         authorizedClientManager.setAuthorizedClientProvider(authorizedClientProvider);
 
         return authorizedClientManager;
     }
+
+    private static DefaultClientCredentialsTokenResponseClient getDefaultClientCredentialsTokenResponseClient(String audience) {
+        DefaultClientCredentialsTokenResponseClient responseClient = new DefaultClientCredentialsTokenResponseClient();
+        OAuth2ClientCredentialsGrantRequestEntityConverter converter = new OAuth2ClientCredentialsGrantRequestEntityConverter();
+        converter.addParametersConverter((grantRequest) -> {
+            MultiValueMap<String, String> parameters = new LinkedMultiValueMap<>();
+            parameters.set("audience", audience);
+            return parameters;
+        });
+
+        responseClient.setRequestEntityConverter(converter);
+        return responseClient;
+    }
+
 }
